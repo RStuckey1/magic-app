@@ -2,6 +2,7 @@ import type { SearchResponse } from '../../../shared/cards.js'
 import { ApiError } from '../errors/ApiError.js'
 
 const SCRYFALL_SEARCH_URL = 'https://api.scryfall.com/cards/search'
+const SCRYFALL_USER_AGENT = 'ManaIndex/0.0.0'
 
 export async function searchCards(query: string): Promise<SearchResponse> {
   const url = new URL(SCRYFALL_SEARCH_URL)
@@ -33,7 +34,12 @@ export async function getCardPage(pageUrl: string): Promise<SearchResponse> {
 async function fetchCards(url: URL): Promise<SearchResponse> {
   let response: Response
   try {
-    response = await fetch(url)
+    response = await fetch(url, {
+      headers: {
+        'User-Agent': SCRYFALL_USER_AGENT,
+        Accept: 'application/json',
+      },
+    })
   } catch {
     throw new ApiError('Scryfall could not be reached. Please try again.', 502)
   }
