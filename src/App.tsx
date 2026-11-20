@@ -1,33 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { getCardPage, searchCards } from './api/cards'
+import AccountDecklists from './components/AccountDecklists'
+import type { ScryfallCard } from '../shared/cards'
 import './App.css'
-
-type CardImageUris = {
-  normal?: string
-  large?: string
-  art_crop?: string
-}
-
-type ScryfallCard = {
-  id: string
-  name: string
-  mana_cost?: string
-  type_line: string
-  oracle_text?: string
-  set_name: string
-  set: string
-  rarity: string
-  image_uris?: CardImageUris
-  card_faces?: { image_uris?: CardImageUris }[]
-  prices: { usd: string | null }
-  scryfall_uri: string
-}
-
-type SearchResponse = {
-  data: ScryfallCard[]
-  has_more: boolean
-  next_page?: string
-  total_cards: number
-}
 
 const colors = [
   { code: 'W', label: 'White', className: 'white' },
@@ -83,26 +58,7 @@ function App() {
       setNextPage(undefined)
 
       try {
-        const url = new URL('https://api.scryfall.com/cards/search')
-        url.searchParams.set('q', query)
-        url.searchParams.set('order', 'name')
-        const response = await fetch(url, { signal: controller.signal })
-        const payload = await response.json()
-
-        if (response.status === 404) {
-          if (requestId === searchId.current) {
-            setResults([])
-            setTotalCards(0)
-            setNextPage(undefined)
-          }
-          return
-        }
-
-        if (!response.ok) {
-          throw new Error(payload.details || 'The card search could not be completed.')
-        }
-
-        const data = payload as SearchResponse
+        const data = await searchCards(query, controller.signal)
         if (requestId === searchId.current) {
           setResults(data.data)
           setTotalCards(data.total_cards)
@@ -133,14 +89,9 @@ function App() {
     setError('')
 
     try {
-      const response = await fetch(nextPage)
-      const payload = await response.json()
-      if (!response.ok) {
-        throw new Error(payload.details || 'More cards could not be loaded.')
-      }
+      const data = await getCardPage(nextPage)
       if (requestId !== searchId.current) return
 
-      const data = payload as SearchResponse
       setResults((current) => [...current, ...data.data])
       setNextPage(data.next_page)
     } catch (requestError) {
@@ -193,7 +144,7 @@ function App() {
       <main>
         <section className="intro">
           <p className="eyebrow">YOUR GATHERING, CATALOGUED</p>
-          <h1>Find your next<br /><span>favorite card.</span></h1>
+          <h1>Find Your Next<br /><span>Favorite Card.</span></h1>
           <p className="intro-copy">
             Search across every set, every format, and every plane.
           </p>
@@ -381,6 +332,8 @@ function App() {
             )}
           </div>
         </section>
+
+        <AccountDecklists cards={results} />
       </main>
 
       <footer>
