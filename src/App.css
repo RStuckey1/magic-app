@@ -780,6 +780,22 @@ footer a:hover {
   font-size: 14px;
 }
 
+.deck-card-search {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.deck-card-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0 11px;
+}
+
+.deck-card-search button {
+  flex: 0 0 auto;
+}
+
 .deck-card-list {
   max-height: 330px;
   overflow: auto;
@@ -803,9 +819,45 @@ footer a:hover {
   gap: 4px;
 }
 
+.decks-panel .deck-card-name {
+  flex: 1;
+  min-width: 0;
+  min-height: 29px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.decks-panel .deck-card-name:hover:not(:disabled) {
+  border: 0;
+  color: var(--moss-dark);
+  text-decoration: underline;
+}
+
 .deck-card-list button {
   min-height: 29px;
   padding: 0 8px;
+}
+
+.card-preview-tooltip {
+  position: fixed;
+  z-index: 10;
+  width: 164px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fffefa;
+  box-shadow: 0 8px 26px rgba(43, 45, 33, 0.22);
+  color: var(--muted);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.card-preview-tooltip img {
+  width: 100%;
+  display: block;
+  border-radius: 6px;
 }
 
 .deck-empty,

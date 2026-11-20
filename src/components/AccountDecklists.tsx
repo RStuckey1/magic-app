@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from 'react'
 import { ApiRequestError, apiRequest } from '../api/client'
+import { getCardById, searchCards } from '../api/cards'
 import type { ScryfallCard } from '../../shared/cards'
 
 type User = { id: string; email: string }
@@ -9,12 +10,17 @@ type Decklist = {
   name: string
   cards: DeckCard[]
 }
-
-type AccountDecklistsProps = {
-  cards: ScryfallCard[]
+type CardPreview = {
+  cardId: string
+  cardName: string
+  image: string | null
+  loading: boolean
+  error: string
+  left: number
+  top: number
 }
 
-export default function AccountDecklists({ cards }: AccountDecklistsProps) {
+export default function AccountDecklists() {
   const [user, setUser] = useState<User | null>(null)
   const [decklists, setDecklists] = useState<Decklist[]>([])
   const [selectedDeckId, setSelectedDeckId] = useState('')
@@ -24,6 +30,15 @@ export default function AccountDecklists({ cards }: AccountDecklistsProps) {
   const [isRegistering, setIsRegistering] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [cardSearchText, setCardSearchText] = useState('')
+  const [cardSearchQuery, setCardSearchQuery] = useState('')
+  const [cardSearchResults, setCardSearchResults] = useState<ScryfallCard[]>([])
+  const [cardSearchLoading, setCardSearchLoading] = useState(false)
+  const [cardSearchError, setCardSearchError] = useState('')
+  const [cardPreview, setCardPreview] = useState<CardPreview | null>(null)
+  const cardSearchController = useRef<AbortController | null>(null)
+  const cardPreviewController = useRef<AbortController | null>(null)
+  const cardImageCache = useRef(new Map<string, string | null>())
 
   useEffect(() => {
     let active = true
@@ -60,7 +75,107 @@ export default function AccountDecklists({ cards }: AccountDecklistsProps) {
     return () => { active = false }
   }, [user])
 
+  useEffect(() => () => {
+    cardSearchController.current?.abort()
+    cardPreviewController.current?.abort()
+  }, [])
+
   const selectedDeck = decklists.find((decklist) => decklist.id === selectedDeckId)
+
+  async function searchForCards(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const query = cardSearchText.trim()
+    setCardSearchQuery(query)
+    if (!query) {
+      cardSearchController.current?.abort()
+      cardSearchController.current = null
+      setCardSearchResults([])
+      setCardSearchError('')
+      setCardSearchLoading(false)
+      return
+    }
+
+    cardSearchController.current?.abort()
+    const controller = new AbortController()
+    cardSearchController.current = controller
+    setCardSearchLoading(true)
+    setCardSearchError('')
+    setCardSearchResults([])
+
+    try {
+      const { data } = await searchCards(query, controller.signal)
+      if (!controller.signal.aborted) setCardSearchResults(data)
+    } catch (requestError) {
+      if (!controller.signal.aborted) setCardSearchError(errorMessage(requestError))
+    } finally {
+      if (!controller.signal.aborted) {
+        setCardSearchLoading(false)
+        cardSearchController.current = null
+      }
+    }
+  }
+
+  function closeCardPreview() {
+    cardPreviewController.current?.abort()
+    cardPreviewController.current = null
+    setCardPreview(null)
+  }
+
+  async function toggleCardPreview(
+    event: MouseEvent<HTMLButtonElement>,
+    card: DeckCard,
+  ) {
+    if (cardPreview?.cardId === card.cardId) {
+      closeCardPreview()
+      return
+    }
+
+    cardPreviewController.current?.abort()
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const previewWidth = 164
+    const previewHeight = 250
+    const gap = 8
+    const left = bounds.right + previewWidth + gap <= window.innerWidth
+      ? bounds.right + gap
+      : Math.max(gap, bounds.left - previewWidth - gap)
+    const top = Math.min(
+      Math.max(gap, bounds.top),
+      Math.max(gap, window.innerHeight - previewHeight - gap),
+    )
+    const cached = cardImageCache.current.get(card.cardId)
+    const hasCachedImage = cardImageCache.current.has(card.cardId)
+    setCardPreview({
+      cardId: card.cardId,
+      cardName: card.cardName,
+      image: cached ?? null,
+      loading: !hasCachedImage,
+      error: '',
+      left,
+      top,
+    })
+    if (hasCachedImage) return
+
+    const controller = new AbortController()
+    cardPreviewController.current = controller
+    try {
+      const cardData = await getCardById(card.cardId, controller.signal)
+      const image = cardImage(cardData)
+      cardImageCache.current.set(card.cardId, image)
+      if (!controller.signal.aborted) {
+        setCardPreview((current) => current?.cardId === card.cardId
+          ? { ...current, image, loading: false }
+          : current)
+      }
+    } catch (requestError) {
+      if (!controller.signal.aborted) {
+        setCardPreview((current) => current?.cardId === card.cardId
+          ? { ...current, loading: false, error: errorMessage(requestError) }
+          : current)
+      }
+    } finally {
+      if (!controller.signal.aborted) cardPreviewController.current = null
+    }
+  }
 
   async function handleAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -86,6 +201,7 @@ export default function AccountDecklists({ cards }: AccountDecklistsProps) {
     setError('')
     try {
       await apiRequest('/api/auth/logout', { method: 'POST' })
+      closeCardPreview()
       setUser(null)
       setDecklists([])
       setSelectedDeckId('')
@@ -144,6 +260,7 @@ export default function AccountDecklists({ cards }: AccountDecklistsProps) {
     setError('')
     try {
       await apiRequest(`/api/decklists/${selectedDeck.id}`, { method: 'DELETE' })
+      closeCardPreview()
       setDecklists((current) => current.filter((decklist) => decklist.id !== selectedDeck.id))
       setSelectedDeckId('')
     } catch (requestError) {
@@ -184,6 +301,7 @@ export default function AccountDecklists({ cards }: AccountDecklistsProps) {
 
   async function removeCard(cardId: string) {
     if (!selectedDeck) return
+    if (cardPreview?.cardId === cardId) closeCardPreview()
     setBusy(true)
     setError('')
     try {
@@ -268,7 +386,13 @@ export default function AccountDecklists({ cards }: AccountDecklistsProps) {
               <div className="deck-selector">
                 <label>
                   Decklist
-                  <select value={selectedDeckId} onChange={(event) => setSelectedDeckId(event.target.value)}>
+                  <select
+                    value={selectedDeckId}
+                    onChange={(event) => {
+                      closeCardPreview()
+                      setSelectedDeckId(event.target.value)
+                    }}
+                  >
                     {decklists.map((decklist) => (
                       <option key={decklist.id} value={decklist.id}>{decklist.name}</option>
                     ))}
@@ -291,8 +415,18 @@ export default function AccountDecklists({ cards }: AccountDecklistsProps) {
                     ) : (
                       <ul className="deck-card-list">
                         {selectedDeck.cards.map((card) => (
-                          <li key={card.cardId}>
-                            <span>{card.quantity}× {card.cardName}</span>
+                          <li key={card.cardId} onMouseLeave={closeCardPreview}>
+                            <button
+                              className="deck-card-name"
+                              type="button"
+                              aria-expanded={cardPreview?.cardId === card.cardId}
+                              aria-describedby={cardPreview?.cardId === card.cardId
+                                ? `card-preview-${card.cardId}`
+                                : undefined}
+                              onClick={(event) => void toggleCardPreview(event, card)}
+                            >
+                              {card.quantity}× {card.cardName}
+                            </button>
                             <div>
                               <button
                                 type="button"
@@ -325,12 +459,28 @@ export default function AccountDecklists({ cards }: AccountDecklistsProps) {
                   </div>
 
                   <div className="add-cards">
-                    <h3>Add from search results</h3>
-                    {cards.length === 0 ? (
-                      <p className="deck-empty">Search for cards to add them to this decklist.</p>
-                    ) : (
+                    <h3>Search cards to add</h3>
+                    <form className="deck-card-search" onSubmit={(event) => void searchForCards(event)} role="search">
+                      <input
+                        aria-label="Search cards for this decklist"
+                        placeholder="Card name or Scryfall search"
+                        value={cardSearchText}
+                        onChange={(event) => setCardSearchText(event.target.value)}
+                      />
+                      <button type="submit" disabled={cardSearchLoading}>
+                        {cardSearchLoading ? 'Searching…' : 'Search'}
+                      </button>
+                    </form>
+                    {cardSearchError && <p className="account-error" role="alert">{cardSearchError}</p>}
+                    {!cardSearchError && cardSearchLoading ? (
+                      <p className="deck-empty">Searching cards…</p>
+                    ) : !cardSearchError && cardSearchResults.length === 0 ? (
+                      <p className="deck-empty">
+                        {cardSearchQuery ? 'No cards found. Try a different search.' : 'Search for cards to add them to this decklist.'}
+                      </p>
+                    ) : !cardSearchError && (
                       <ul className="deck-card-list">
-                        {cards.map((card) => {
+                        {cardSearchResults.map((card) => {
                           const existing = selectedDeck.cards.find((item) => item.cardId === card.id)
                           return (
                             <li key={card.id}>
@@ -348,6 +498,24 @@ export default function AccountDecklists({ cards }: AccountDecklistsProps) {
                   </div>
                 </div>
               )}
+              {cardPreview && (
+                <div
+                  className="card-preview-tooltip"
+                  id={`card-preview-${cardPreview.cardId}`}
+                  role="tooltip"
+                  style={{ left: cardPreview.left, top: cardPreview.top }}
+                >
+                  {cardPreview.loading ? (
+                    <span>Loading card…</span>
+                  ) : cardPreview.error ? (
+                    <span>{cardPreview.error}</span>
+                  ) : cardPreview.image ? (
+                    <img src={cardPreview.image} alt={cardPreview.cardName} />
+                  ) : (
+                    <span>Image unavailable</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {decklists.length === 0 && <p className="deck-empty">Create your first decklist above.</p>}
@@ -361,4 +529,12 @@ export default function AccountDecklists({ cards }: AccountDecklistsProps) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'The request could not be completed.'
+}
+
+function cardImage(card: ScryfallCard) {
+  return card.image_uris?.small
+    ?? card.card_faces?.[0]?.image_uris?.small
+    ?? card.image_uris?.normal
+    ?? card.card_faces?.[0]?.image_uris?.normal
+    ?? null
 }

@@ -1,5 +1,9 @@
 import type { Request, Response } from 'express'
-import { getCardPage as fetchCardPage, searchCards as fetchCards } from '../services/scryfallService.js'
+import {
+  getCardById as fetchCardById,
+  getCardPage as fetchCardPage,
+  searchCards as fetchCards,
+} from '../services/scryfallService.js'
 import { ApiError } from '../errors/ApiError.js'
 
 export async function searchCards(request: Request, response: Response) {
@@ -9,6 +13,18 @@ export async function searchCards(request: Request, response: Response) {
   }
 
   response.json(await fetchCards(query))
+}
+
+export async function getCardById(request: Request, response: Response) {
+  const cardId = request.params.cardId
+  if (
+    typeof cardId !== 'string'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cardId)
+  ) {
+    throw new ApiError('A valid card ID is required.', 400)
+  }
+
+  response.json(await fetchCardById(cardId))
 }
 
 export async function getCardPage(request: Request, response: Response) {

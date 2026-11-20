@@ -1,4 +1,4 @@
-import type { SearchResponse } from '../../../shared/cards.js'
+import type { ScryfallCard, SearchResponse } from '../../../shared/cards.js'
 import { ApiError } from '../errors/ApiError.js'
 
 const SCRYFALL_SEARCH_URL = 'https://api.scryfall.com/cards/search'
@@ -9,6 +9,36 @@ export async function searchCards(query: string): Promise<SearchResponse> {
   url.searchParams.set('q', query)
   url.searchParams.set('order', 'name')
   return fetchCards(url)
+}
+
+export async function getCardById(cardId: string): Promise<ScryfallCard> {
+  let response: Response
+  try {
+    response = await fetch(`https://api.scryfall.com/cards/${encodeURIComponent(cardId)}`, {
+      headers: {
+        'User-Agent': SCRYFALL_USER_AGENT,
+        Accept: 'application/json',
+      },
+    })
+  } catch {
+    throw new ApiError('Scryfall could not be reached. Please try again.', 502)
+  }
+
+  let payload: ScryfallCard | { details?: string }
+  try {
+    payload = await response.json() as ScryfallCard | { details?: string }
+  } catch {
+    throw new ApiError('Scryfall returned an invalid card response.', 502)
+  }
+
+  if (!response.ok) {
+    const message = 'details' in payload && payload.details
+      ? payload.details
+      : 'The card preview could not be loaded.'
+    throw new ApiError(message, response.status === 404 ? 404 : 502)
+  }
+
+  return payload as ScryfallCard
 }
 
 export async function getCardPage(pageUrl: string): Promise<SearchResponse> {

@@ -142,7 +142,7 @@ function App() {
       </header>
 
       <main>
-        <AccountDecklists cards={results} />
+        <AccountDecklists />
 
         <section className="intro">
           <p className="eyebrow">YOUR GATHERING, CATALOGUED</p>

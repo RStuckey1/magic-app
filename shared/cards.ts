@@ -1,4 +1,5 @@
 export type CardImageUris = {
+  small?: string
   normal?: string
   large?: string
   art_crop?: string
