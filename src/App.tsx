@@ -142,6 +142,8 @@ function App() {
       </header>
 
       <main>
+        <AccountDecklists cards={results} />
+
         <section className="intro">
           <p className="eyebrow">YOUR GATHERING, CATALOGUED</p>
           <h1>Find Your Next<br /><span>Favorite Card.</span></h1>
@@ -333,7 +335,6 @@ function App() {
           </div>
         </section>
 
-        <AccountDecklists cards={results} />
       </main>
 
       <footer>

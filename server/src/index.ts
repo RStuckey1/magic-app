@@ -7,8 +7,8 @@ const port = Number(process.env.PORT) || 3001
 async function startServer() {
   assertJwtConfig()
   await pool.query('SELECT 1')
-  app.listen(port, () => {
-    console.log(`Card API listening on http://localhost:${port}`)
+  app.listen(port, '127.0.0.1', () => {
+    console.log(`Card API listening on http://127.0.0.1:${port}`)
   })
 }
 

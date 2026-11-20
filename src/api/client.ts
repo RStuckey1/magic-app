@@ -9,18 +9,34 @@ export class ApiRequestError extends Error {
 }
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    credentials: 'same-origin',
-    headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...init?.headers,
-    },
-  })
+  let response: Response
+  try {
+    response = await fetch(path, {
+      ...init,
+      credentials: 'same-origin',
+      headers: {
+        ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+        ...init?.headers,
+      },
+    })
+  } catch {
+    throw new ApiRequestError(
+      'The API is unreachable. Check that the Express server is running on port 3001.',
+      0,
+    )
+  }
 
   if (response.status === 204) return undefined as T
 
-  const payload: unknown = await response.json()
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch {
+    throw new ApiRequestError(
+      'The API returned an empty or invalid response. Check the [api] terminal output.',
+      response.status,
+    )
+  }
   if (!response.ok) {
     const message = isErrorPayload(payload) && typeof payload.error === 'string'
       ? payload.error
